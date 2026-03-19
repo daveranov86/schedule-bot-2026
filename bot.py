@@ -1,92 +1,170 @@
-from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import json
 import os
+import json
+import requests
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify
 
 TOKEN = os.getenv("TOKEN")
+BASE_URL = os.getenv("BASE_URL")  # например: https://schedule-bot-2026.onrender.com
+
+if not TOKEN:
+    raise ValueError("TOKEN не найден в переменных окружения")
+
+if not BASE_URL:
+    raise ValueError("BASE_URL не найден в переменных окружения")
+
+API_URL = f"https://api.telegram.org/bot{TOKEN}"
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
+WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
 with open("schedule.json", "r", encoding="utf-8") as f:
     SCHEDULE = json.load(f)
 
-DAYS = {0:"monday",1:"tuesday",2:"wednesday",3:"thursday",4:"friday",5:"saturday",6:"sunday"}
-
-DAY_RU = {
-    "monday":"Понедельник","tuesday":"Вторник","wednesday":"Среда",
-    "thursday":"Четверг","friday":"Пятница","saturday":"Суббота","sunday":"Воскресенье"
+DAYS = {
+    0: "monday",
+    1: "tuesday",
+    2: "wednesday",
+    3: "thursday",
+    4: "friday",
+    5: "saturday",
+    6: "sunday"
 }
 
-keyboard = ReplyKeyboardMarkup(
-    [["Сегодня","Завтра"],["Неделя","Следующая пара"]],
-    resize_keyboard=True
-)
+DAY_RU = {
+    "monday": "Понедельник",
+    "tuesday": "Вторник",
+    "wednesday": "Среда",
+    "thursday": "Четверг",
+    "friday": "Пятница",
+    "saturday": "Суббота",
+    "sunday": "Воскресенье"
+}
+
+KEYBOARD = {
+    "keyboard": [
+        [{"text": "Сегодня"}, {"text": "Завтра"}],
+        [{"text": "Неделя"}, {"text": "Следующая пара"}]
+    ],
+    "resize_keyboard": True
+}
+
+app = Flask(__name__)
+
+
+def telegram_request(method: str, data: dict):
+    url = f"{API_URL}/{method}"
+    return requests.post(url, json=data, timeout=30)
+
+
+def send_message(chat_id, text):
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "reply_markup": KEYBOARD
+    }
+    telegram_request("sendMessage", payload)
+
 
 def format_day(day):
     lessons = SCHEDULE.get(day, [])
     if not lessons:
-        return f"{DAY_RU[day]}: пар нет"
+        return f"{DAY_RU[day]}: пар нет 🎉"
 
     text = f"📚 {DAY_RU[day]}\n"
-    for l in lessons:
-        text += f"{l['time']} — {l['subject']} — {l['room']}\n"
-    return text
+    for lesson in lessons:
+        text += f"{lesson['time']} — {lesson['subject']} — кабинет {lesson['room']}\n"
+    return text.strip()
 
-def get_next():
+
+def get_next_lesson():
     now = datetime.now()
     day = DAYS[now.weekday()]
     current = now.strftime("%H:%M")
 
-    for l in SCHEDULE.get(day, []):
-        start = l["time"].split("-")[0]
+    for lesson in SCHEDULE.get(day, []):
+        start = lesson["time"].split("-")[0]
         if current <= start:
-            return l
+            return lesson
     return None
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот работает 👍", reply_markup=keyboard)
 
-async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    day = DAYS[datetime.now().weekday()]
-    await update.message.reply_text(format_day(day), reply_markup=keyboard)
+def handle_text(chat_id, text):
+    text = (text or "").strip()
 
-async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    day = DAYS[(datetime.now()+timedelta(days=1)).weekday()]
-    await update.message.reply_text(format_day(day), reply_markup=keyboard)
-
-async def week(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = ""
-    for d in ["monday","tuesday","wednesday","thursday","friday","saturday"]:
-        text += format_day(d)+"\n\n"
-    await update.message.reply_text(text, reply_markup=keyboard)
-
-async def next_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    l = get_next()
-    if l:
-        await update.message.reply_text(
-            f"📍 Следующая пара:\n{l['subject']}\n{l['time']}\nКабинет: {l['room']}",
-            reply_markup=keyboard
+    if text == "/start":
+        send_message(
+            chat_id,
+            "Привет! Я бот с расписанием.\n\n"
+            "Команды:\n"
+            "/today — сегодня\n"
+            "/tomorrow — завтра\n"
+            "/week — неделя\n"
+            "/next — следующая пара"
         )
-    else:
-        await update.message.reply_text("Пар больше нет", reply_markup=keyboard)
+        return
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    t = update.message.text
-    if t == "Сегодня":
-        await today(update, context)
-    elif t == "Завтра":
-        await tomorrow(update, context)
-    elif t == "Неделя":
-        await week(update, context)
-    elif t == "Следующая пара":
-        await next_lesson(update, context)
+    if text in ["/today", "Сегодня"]:
+        day = DAYS[datetime.now().weekday()]
+        send_message(chat_id, format_day(day))
+        return
 
-app = ApplicationBuilder().token(TOKEN).build()
+    if text in ["/tomorrow", "Завтра"]:
+        day = DAYS[(datetime.now() + timedelta(days=1)).weekday()]
+        send_message(chat_id, format_day(day))
+        return
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("today", today))
-app.add_handler(CommandHandler("tomorrow", tomorrow))
-app.add_handler(CommandHandler("week", week))
-app.add_handler(CommandHandler("next", next_lesson))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, buttons))
+    if text in ["/week", "Неделя"]:
+        text_out = "\n\n".join(
+            format_day(d) for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+        )
+        send_message(chat_id, text_out)
+        return
 
-app.run_polling()
+    if text in ["/next", "Следующая пара"]:
+        lesson = get_next_lesson()
+        if lesson:
+            send_message(
+                chat_id,
+                f"📍 Следующая пара:\n"
+                f"{lesson['subject']}\n"
+                f"{lesson['time']}\n"
+                f"Кабинет: {lesson['room']}"
+            )
+        else:
+            send_message(chat_id, "На сегодня пар больше нет.")
+        return
+
+    send_message(chat_id, "Я понимаю: /start, /today, /tomorrow, /week, /next")
+
+
+def set_webhook():
+    requests.post(
+        f"{API_URL}/setWebhook",
+        json={"url": WEBHOOK_URL},
+        timeout=30
+    )
+
+
+@app.get("/")
+def health():
+    return "ok", 200
+
+
+@app.post(WEBHOOK_PATH)
+def webhook():
+    update = request.get_json(silent=True) or {}
+    message = update.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = message.get("text", "")
+
+    if chat_id:
+        handle_text(chat_id, text)
+
+    return jsonify({"ok": True})
+
+
+if __name__ == "__main__":
+    set_webhook()
+    port = int(os.getenv("PORT", "10000"))
+    app.run(host="0.0.0.0", port=port)
