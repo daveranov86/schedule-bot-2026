@@ -16,7 +16,7 @@ def send_message(chat_id, text):
     })
 
 # webhook
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
 
