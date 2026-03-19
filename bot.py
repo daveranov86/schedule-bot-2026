@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 
 TOKEN = os.getenv("TOKEN")
-BASE_URL = os.getenv("BASE_URL")  # например: https://schedule-bot-2026.onrender.com
+BASE_URL = os.getenv("BASE_URL")
 
 if not TOKEN:
     raise ValueError("TOKEN не найден в переменных окружения")
@@ -13,6 +13,7 @@ if not TOKEN:
 if not BASE_URL:
     raise ValueError("BASE_URL не найден в переменных окружения")
 
+BASE_URL = BASE_URL.rstrip("/")
 API_URL = f"https://api.telegram.org/bot{TOKEN}"
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
@@ -70,10 +71,10 @@ def format_day(day):
     if not lessons:
         return f"{DAY_RU[day]}: пар нет 🎉"
 
-    text = f"📚 {DAY_RU[day]}\n"
+    lines = [f"📚 {DAY_RU[day]}"]
     for lesson in lessons:
-        text += f"{lesson['time']} — {lesson['subject']} — кабинет {lesson['room']}\n"
-    return text.strip()
+        lines.append(f"{lesson['time']} — {lesson['subject']} — кабинет {lesson['room']}")
+    return "\n".join(lines)
 
 
 def get_next_lesson():
@@ -96,9 +97,9 @@ def handle_text(chat_id, text):
             chat_id,
             "Привет! Я бот с расписанием.\n\n"
             "Команды:\n"
-            "/today — сегодня\n"
-            "/tomorrow — завтра\n"
-            "/week — неделя\n"
+            "/today — расписание на сегодня\n"
+            "/tomorrow — расписание на завтра\n"
+            "/week — расписание на неделю\n"
             "/next — следующая пара"
         )
         return
@@ -134,15 +135,18 @@ def handle_text(chat_id, text):
             send_message(chat_id, "На сегодня пар больше нет.")
         return
 
-    send_message(chat_id, "Я понимаю: /start, /today, /tomorrow, /week, /next")
+    send_message(chat_id, "Я понимаю команды: /start, /today, /tomorrow, /week, /next")
 
 
 def set_webhook():
-    requests.post(
+    response = requests.post(
         f"{API_URL}/setWebhook",
         json={"url": WEBHOOK_URL},
         timeout=30
     )
+    print("SET WEBHOOK URL:", WEBHOOK_URL)
+    print("SET WEBHOOK STATUS:", response.status_code)
+    print("SET WEBHOOK RESPONSE:", response.text)
 
 
 @app.get("/")
