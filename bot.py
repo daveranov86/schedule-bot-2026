@@ -5,10 +5,11 @@ import os
 
 app = Flask(__name__)
 
-TOKEN = "8760259729:AAGD0y2l7IM0UxjyptOPB6NLZPeVga-lEVc"
+# Если TOKEN уже добавлен в Render -> оставь как есть
+TOKEN = os.environ.get("TOKEN", "8760259729:AAGD0y2l7IM0UxjyptOPB6NLZPeVga-lEVc")
 URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-ALLOWED_ID = 1020934186  # твой ID
+ALLOWED_ID = 1020934186  # твой Telegram ID
 
 SCHEDULE = {
     "default": {
@@ -57,7 +58,7 @@ def send_message(chat_id, text):
     requests.post(URL, json={
         "chat_id": chat_id,
         "text": text
-    })
+    }, timeout=20)
 
 
 def format_day(day):
@@ -69,7 +70,6 @@ def format_day(day):
     text = f"📚 {DAY_RU[day]}:\n"
     for lesson in lessons:
         text += f"{lesson['time']} — {lesson['subject']}\n"
-
     return text.strip()
 
 
@@ -95,6 +95,9 @@ def get_next_lesson():
         if start <= current < end:
             return f"Сейчас идёт:\n{lesson['time']} — {lesson['subject']}\nКабинет: {lesson['room']}"
 
+        if current >= end:
+            continue
+
         if current < start:
             return f"Следующая пара:\n{lesson['time']} — {lesson['subject']}\nКабинет: {lesson['room']}"
 
@@ -114,10 +117,10 @@ def webhook():
     text = (msg.get("text") or "").strip().lower()
 
     if not chat_id:
-        return "ok"
+        return "ok", 200
 
     if chat_id != ALLOWED_ID:
-        return "ok"
+        return "ok", 200
 
     if text == "/start":
         send_message(chat_id, "Бот работает\n\nКоманды:\nСегодня\nЗавтра\nНеделя\nСледующая пара")
@@ -143,7 +146,7 @@ def webhook():
     else:
         send_message(chat_id, "Используй: Сегодня, Завтра, Неделя, Следующая пара")
 
-    return "ok"
+    return "ok", 200
 
 
 if __name__ == "__main__":
