@@ -109,6 +109,10 @@ SCHEDULE = {
 }
 
 
+def msk_now():
+    return datetime.utcnow() + timedelta(hours=3)
+
+
 def tg_post(method: str, payload: dict) -> None:
     requests.post(f"{API_URL}/{method}", json=payload, timeout=30)
 
@@ -126,7 +130,7 @@ def send_message(chat_id: int, text: str) -> None:
 
 def get_week_type(target_date=None) -> str:
     if target_date is None:
-        target_date = datetime.now()
+        target_date = msk_now()
     monday = target_date - timedelta(days=target_date.weekday())
     return "even" if monday.day % 2 == 0 else "odd"
 
@@ -145,7 +149,7 @@ def format_day(day_key: str, target_date=None) -> str:
 
 
 def get_next_lesson() -> str:
-    now = datetime.now()
+    now = msk_now()
     week_type = get_week_type(now)
     day_key = DAYS_MAP[now.weekday()]
     lessons = SCHEDULE[week_type][day_key]
@@ -200,28 +204,23 @@ def webhook():
     if text == "/start":
         send_message(
             chat_id,
-            "Привет! Я бот с расписанием МИРЭА.\n\n"
-            "Команды:\n"
-            "сегодня\n"
-            "завтра\n"
-            "неделя\n"
-            "следующая пара",
+            "Привет! Я бот с расписанием МИРЭА.\n\nКоманды:\nсегодня\nзавтра\nнеделя\nследующая пара",
         )
 
     elif text in ["сегодня", "/today"]:
-        today = datetime.now()
+        today = msk_now()
         send_message(chat_id, format_day(DAYS_MAP[today.weekday()], today))
 
     elif text in ["завтра", "/tomorrow"]:
-        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = msk_now() + timedelta(days=1)
         send_message(chat_id, format_day(DAYS_MAP[tomorrow.weekday()], tomorrow))
 
     elif text in ["неделя", "/week"]:
-        week_type = get_week_type()
+        week_type = get_week_type(msk_now())
         title = "Чётная неделя" if week_type == "even" else "Нечётная неделя"
         result = [f"📅 {title}"]
         for day_key in DAYS_MAP.values():
-            result.append(format_day(day_key))
+            result.append(format_day(day_key, msk_now()))
         send_message(chat_id, "\n\n".join(result))
 
     elif text in ["следующая пара", "/next"]:
