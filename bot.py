@@ -1,19 +1,93 @@
 import os
-import json
 import requests
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify
+from flask import Flask, request
+from datetime import datetime
 
 TOKEN = os.environ.get("TOKEN")
-if not TOKEN:
-    raise ValueError("TOKEN не найден")
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-API_BASE = f"https://api.telegram.org/bot{TOKEN}"
+app = Flask(__name__)
 
-with open("schedule.json", "r", encoding="utf-8") as f:
-    SCHEDULE = json.load(f)
+def send_message(chat_id, text):
+    url = f"{BASE_URL}/sendMessage"
+    requests.post(url, json={
+        "chat_id": chat_id,
+        "text": text
+    })
 
-DAYS = {
+# ===== РАСПИСАНИЕ =====
+
+schedule = {
+    "even": {  # четная
+        "monday": """Понедельник:
+09:00–10:30 История России
+10:40–12:10 Основы гос.
+12:40–14:10 Админ право
+14:20–15:50 Экономика""",
+
+        "tuesday": """Вторник:
+09:00–10:30 Регламентация
+10:40–12:10 История
+12:40–14:10 Политология
+14:20–15:50 Конституционное право""",
+
+        "wednesday": """Среда:
+14:20–15:50 Физра
+16:20–17:50 Физра
+18:00–19:30 Матан""",
+
+        "thursday": """Четверг:
+12:40–14:10 Конституционное право
+14:20–15:50 Экономика
+16:20–17:50 Экономика
+18:00–19:30 Макроэкономика""",
+
+        "friday": """Пятница:
+09:00–10:30 Макро
+10:40–12:10 Регламентация
+12:40–14:10 Русский""",
+
+        "saturday": """Суббота:
+16:20–17:50 Матан
+18:00–19:30 Матан""",
+
+        "sunday": "Выходной"
+    },
+
+    "odd": {  # нечетная
+        "monday": """Понедельник:
+09:00–10:30 История
+10:40–12:10 Основы гос.
+12:40–14:10 Админ право
+14:20–15:50 Админ право (лекция)""",
+
+        "tuesday": """Вторник:
+09:00–10:30 Регламентация
+10:40–12:10 История
+12:40–14:10 Основы гос.
+14:20–15:50 Конституционное право""",
+
+        "wednesday": """Среда:
+16:20–17:50 Английский
+18:00–19:30 Английский""",
+
+        "thursday": """Четверг:
+18:00–19:30 Макроэкономика""",
+
+        "friday": """Пятница:
+09:00–10:30 Макро
+10:40–12:10 Регламентация
+12:40–14:10 Политология""",
+
+        "saturday": """Суббота:
+10:40–12:10 Русский
+12:40–14:10 Обучение служением""",
+
+        "sunday": "Выходной"
+    }
+}
+
+days_map = {
     0: "monday",
     1: "tuesday",
     2: "wednesday",
@@ -23,132 +97,39 @@ DAYS = {
     6: "sunday"
 }
 
-DAY_RU = {
-    "monday": "Понедельник",
-    "tuesday": "Вторник",
-    "wednesday": "Среда",
-    "thursday": "Четверг",
-    "friday": "Пятница",
-    "saturday": "Суббота",
-    "sunday": "Воскресенье"
-}
+def get_week_type():
+    week_number = datetime.now().isocalendar()[1]
+    return "even" if week_number % 2 == 0 else "odd"
 
-KEYBOARD = {
-    "keyboard": [
-        [{"text": "Сегодня"}, {"text": "Завтра"}],
-        [{"text": "Неделя"}, {"text": "Следующая пара"}]
-    ],
-    "resize_keyboard": True
-}
-
-app = Flask(__name__)
-
-
-def tg(method, payload):
-    requests.post(f"{API_BASE}/{method}", json=payload, timeout=30)
-
-
-def send_message(chat_id, text):
-    tg("sendMessage", {
-        "chat_id": chat_id,
-        "text": text,
-        "reply_markup": KEYBOARD
-    })
-
-
-def format_day(day_key):
-    lessons = SCHEDULE.get(day_key, [])
-    if not lessons:
-        return f"{DAY_RU[day_key]}: пар нет 🎉"
-
-    lines = [f"📚 {DAY_RU[day_key]}"]
-    for lesson in lessons:
-        lines.append(f"{lesson['time']} — {lesson['subject']} — кабинет {lesson['room']}")
-    return "\n".join(lines)
-
-
-def get_next_lesson():
-    now = datetime.now()
-    day_key = DAYS[now.weekday()]
-    current_time = now.strftime("%H:%M")
-    lessons = SCHEDULE.get(day_key, [])
-
-    for lesson in lessons:
-        start_time = lesson["time"].split("-")[0]
-        if current_time <= start_time:
-            return lesson
-    return None
-
-
-def handle_message(chat_id, text):
-    text = (text or "").strip()
-
-    if text == "/start":
-        send_message(
-            chat_id,
-            "Привет! Я бот с расписанием.\n\n"
-            "Команды:\n"
-            "/today — расписание на сегодня\n"
-            "/tomorrow — расписание на завтра\n"
-            "/week — расписание на неделю\n"
-            "/next — следующая пара"
-        )
-        return
-
-    if text in ["/today", "Сегодня"]:
-        day_key = DAYS[datetime.now().weekday()]
-        send_message(chat_id, format_day(day_key))
-        return
-
-    if text in ["/tomorrow", "Завтра"]:
-        tomorrow_date = datetime.now() + timedelta(days=1)
-        day_key = DAYS[tomorrow_date.weekday()]
-        send_message(chat_id, format_day(day_key))
-        return
-
-    if text in ["/week", "Неделя"]:
-        parts = []
-        for day_key in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]:
-            parts.append(format_day(day_key))
-        send_message(chat_id, "\n\n".join(parts))
-        return
-
-    if text in ["/next", "Следующая пара"]:
-        lesson = get_next_lesson()
-        if lesson:
-            send_message(
-                chat_id,
-                f"📍 Следующая пара:\n"
-                f"{lesson['subject']}\n"
-                f"🕒 {lesson['time']}\n"
-                f"🏫 Кабинет: {lesson['room']}"
-            )
-        else:
-            send_message(chat_id, "На сегодня пар больше нет.")
-        return
-
-    send_message(chat_id, "Я понимаю: /start, /today, /tomorrow, /week, /next")
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return "OK", 200
-
-
-@app.route("/webhook", methods=["POST"])
+@app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(silent=True) or {}
-    message = data.get("message") or {}
-    chat = message.get("chat") or {}
-    chat_id = chat.get("id")
-    text = message.get("text", "")
+    data = request.get_json()
 
-    if chat_id:
-        handle_message(chat_id, text)
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "").lower()
 
-    return jsonify({"ok": True})
+        week_type = get_week_type()
+        today = datetime.now().weekday()
+        day_name = days_map[today]
 
+        if text in ["/start"]:
+            send_message(chat_id, "Бот работает ✅")
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+        elif "сегодня" in text or "/today" in text:
+            send_message(chat_id, schedule[week_type][day_name])
+
+        elif "завтра" in text or "/tomorrow" in text:
+            tomorrow = (today + 1) % 7
+            send_message(chat_id, schedule[week_type][days_map[tomorrow]])
+
+        elif "неделя" in text or "/week" in text:
+            result = ""
+            for day in days_map.values():
+                result += schedule[week_type][day] + "\n\n"
+            send_message(chat_id, result)
+
+        else:
+            send_message(chat_id, "Используй: сегодня / завтра / неделя")
+
+    return "ok"
