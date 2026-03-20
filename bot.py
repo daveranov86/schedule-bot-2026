@@ -1,132 +1,231 @@
 import os
+from datetime import datetime, timedelta
+
 import requests
-from flask import Flask, request
-from datetime import datetime
+from flask import Flask, request, jsonify
 
 TOKEN = os.environ.get("TOKEN")
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+if not TOKEN:
+    raise ValueError("TOKEN не найден в переменных окружения")
+
+API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 app = Flask(__name__)
 
-# ===== ОТПРАВКА СООБЩЕНИЯ =====
-def send_message(chat_id, text):
-    url = f"{BASE_URL}/sendMessage"
-    requests.post(url, json={
-        "chat_id": chat_id,
-        "text": text
-    })
-
-# ===== ДНИ НЕДЕЛИ =====
-days_map = {
+DAYS_MAP = {
     0: "monday",
     1: "tuesday",
     2: "wednesday",
     3: "thursday",
     4: "friday",
     5: "saturday",
-    6: "sunday"
+    6: "sunday",
 }
 
-# ===== ОПРЕДЕЛЕНИЕ ЧЕТНОЙ/НЕЧЕТНОЙ =====
-def get_week_type():
-    week_number = datetime.now().isocalendar()[1]
-    return "even" if week_number % 2 == 0 else "odd"
+DAY_RU = {
+    "monday": "Понедельник",
+    "tuesday": "Вторник",
+    "wednesday": "Среда",
+    "thursday": "Четверг",
+    "friday": "Пятница",
+    "saturday": "Суббота",
+    "sunday": "Воскресенье",
+}
 
-# ===== РАСПИСАНИЕ =====
-schedule = {
+KEYBOARD = {
+    "keyboard": [
+        [{"text": "Сегодня"}, {"text": "Завтра"}],
+        [{"text": "Неделя"}, {"text": "Следующая пара"}],
+    ],
+    "resize_keyboard": True,
+}
+
+SCHEDULE = {
     "even": {
-        "monday": "📚 Понедельник:\nВыходной",
-        "tuesday": "📚 Вторник:\nВыходной",
-        "wednesday": "📚 Среда:\nВыходной",
-        "thursday": "📚 Четверг:\nВыходной",
-        "friday": """📚 Пятница:
-09:00–10:30 — Макроэкономика
-10:40–12:10 — Регламентация служебной деятельности
-12:40–14:10 — Русский язык и культура речи""",
-        "saturday": "📚 Суббота:\nВыходной",
-        "sunday": "Выходной"
+        "monday": [
+            {"time": "09:00-10:30", "subject": "История России", "room": "А-462"},
+            {"time": "10:40-12:10", "subject": "Основы российской государственности", "room": "А-401"},
+            {"time": "12:40-14:10", "subject": "Административное право", "room": "А-346"},
+            {"time": "14:20-15:50", "subject": "Экономика государственного и муниципального сектора", "room": "А-463"},
+        ],
+        "tuesday": [
+            {"time": "09:00-10:30", "subject": "Регламентация служебной деятельности государственных гражданских служащих", "room": "Б-310"},
+            {"time": "10:40-12:10", "subject": "История России", "room": "А-63"},
+            {"time": "12:40-14:10", "subject": "Политология", "room": "А-63"},
+            {"time": "14:20-15:50", "subject": "Конституционное право", "room": "А-523"},
+        ],
+        "wednesday": [
+            {"time": "14:20-15:50", "subject": "Физическая культура и спорт", "room": "ФОК-4"},
+            {"time": "16:20-17:50", "subject": "Физическая культура и спорт", "room": "ФОК-4"},
+            {"time": "18:00-19:30", "subject": "Математический анализ", "room": "257"},
+        ],
+        "thursday": [
+            {"time": "12:40-14:10", "subject": "Конституционное право", "room": "А-310"},
+            {"time": "14:20-15:50", "subject": "Экономика государственного и муниципального сектора", "room": "А-462"},
+            {"time": "16:20-17:50", "subject": "Экономика государственного и муниципального сектора", "room": "А-462"},
+            {"time": "18:00-19:30", "subject": "Макроэкономика", "room": "А-256"},
+        ],
+        "friday": [
+            {"time": "09:00-10:30", "subject": "Макроэкономика", "room": "А-61"},
+            {"time": "10:40-12:10", "subject": "Регламентация служебной деятельности государственных гражданских служащих", "room": "А-256"},
+            {"time": "12:40-14:10", "subject": "Русский язык и культура речи", "room": "А-324"},
+        ],
+        "saturday": [
+            {"time": "16:20-17:50", "subject": "Математический анализ", "room": "А-462"},
+            {"time": "18:00-19:30", "subject": "Математический анализ", "room": "А-462"},
+        ],
+        "sunday": [],
     },
     "odd": {
-        "monday": "📚 Понедельник:\nВыходной",
-        "tuesday": "📚 Вторник:\nВыходной",
-        "wednesday": "📚 Среда:\nВыходной",
-        "thursday": "📚 Четверг:\nВыходной",
-        "friday": """📚 Пятница:
-09:00–10:30 — Макроэкономика
-10:40–12:10 — Регламентация служебной деятельности
-12:40–14:10 — Русский язык и культура речи""",
-        "saturday": "📚 Суббота:\nВыходной",
-        "sunday": "Выходной"
-    }
+        "monday": [
+            {"time": "09:00-10:30", "subject": "История России", "room": "А-462"},
+            {"time": "10:40-12:10", "subject": "Основы российской государственности", "room": "А-401"},
+            {"time": "12:40-14:10", "subject": "Административное право", "room": "А-346"},
+            {"time": "14:20-15:50", "subject": "Административное право", "room": "А-463"},
+        ],
+        "tuesday": [
+            {"time": "09:00-10:30", "subject": "Регламентация служебной деятельности государственных гражданских служащих", "room": "Б-310"},
+            {"time": "10:40-12:10", "subject": "История России", "room": "А-63"},
+            {"time": "12:40-14:10", "subject": "Основы российской государственности", "room": "А-63"},
+            {"time": "14:20-15:50", "subject": "Конституционное право", "room": "А-523"},
+        ],
+        "wednesday": [
+            {"time": "16:20-17:50", "subject": "Иностранный язык", "room": "И-318"},
+            {"time": "18:00-19:30", "subject": "Иностранный язык", "room": "И-318"},
+        ],
+        "thursday": [
+            {"time": "18:00-19:30", "subject": "Макроэкономика", "room": "А-256"},
+        ],
+        "friday": [
+            {"time": "09:00-10:30", "subject": "Макроэкономика", "room": "А-61"},
+            {"time": "10:40-12:10", "subject": "Регламентация служебной деятельности государственных гражданских служащих", "room": "А-256"},
+            {"time": "12:40-14:10", "subject": "Политология", "room": "А-324"},
+        ],
+        "saturday": [
+            {"time": "10:40-12:10", "subject": "Русский язык и культура речи", "room": "А-63"},
+            {"time": "12:40-14:10", "subject": "Обучение служением", "room": "А-345"},
+        ],
+        "sunday": [],
+    },
 }
 
-# ===== СЛЕДУЮЩАЯ ПАРА =====
-def get_next_lesson():
+
+def tg_post(method: str, payload: dict) -> None:
+    requests.post(f"{API_URL}/{method}", json=payload, timeout=30)
+
+
+def send_message(chat_id: int, text: str) -> None:
+    tg_post(
+        "sendMessage",
+        {
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": KEYBOARD,
+        },
+    )
+
+
+def get_week_type(target_date: datetime | None = None) -> str:
+    """
+    Четность определяется по понедельнику текущей недели:
+    если число понедельника четное -> even
+    если нечетное -> odd
+    """
+    if target_date is None:
+        target_date = datetime.now()
+
+    monday = target_date - timedelta(days=target_date.weekday())
+    return "even" if monday.day % 2 == 0 else "odd"
+
+
+def format_day(day_key: str, target_date: datetime | None = None) -> str:
+    week_type = get_week_type(target_date)
+    lessons = SCHEDULE[week_type][day_key]
+
+    if not lessons:
+        return f"📚 {DAY_RU[day_key]}:\nВыходной"
+
+    lines = [f"📚 {DAY_RU[day_key]}:"]
+    for lesson in lessons:
+        lines.append(f"{lesson['time']} — {lesson['subject']}")
+    return "\n".join(lines)
+
+
+def get_next_lesson() -> str:
     now = datetime.now()
-    week_type = get_week_type()
-    day_name = days_map[now.weekday()]
-    current_time = now.strftime("%H:%M")
+    week_type = get_week_type(now)
+    day_key = DAYS_MAP[now.weekday()]
+    lessons = SCHEDULE[week_type][day_key]
 
-    lessons_raw = schedule[week_type][day_name]
-
-    if "Выходной" in lessons_raw:
+    if not lessons:
         return "Сегодня выходной"
 
-    lines = lessons_raw.split("\n")[1:]
-    lessons = []
+    current_time = now.strftime("%H:%M")
 
-    for line in lines:
-        if "—" in line:
-            time_part = line.split("—")[0].strip()
-            start_time = time_part.split("–")[0]
-            lessons.append((start_time, line))
-
-    for start_time, lesson in lessons:
+    for lesson in lessons:
+        start_time = lesson["time"].split("-")[0]
         if current_time <= start_time:
-            return f"Следующая пара:\n{lesson}"
+            return (
+                "Следующая пара:\n"
+                f"{lesson['time']} — {lesson['subject']}\n"
+                f"Кабинет: {lesson['room']}"
+            )
 
     return "На сегодня пар больше нет"
 
-# ===== WEBHOOK =====
+
+@app.route("/", methods=["GET"])
+def home():
+    return "Бот работает", 200
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json(silent=True) or {}
     message = data.get("message") or {}
-    chat_id = message.get("chat", {}).get("id")
-    text = (message.get("text") or "").lower()
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").strip().lower()
 
     if not chat_id:
-        return "ok"
-
-    week_type = get_week_type()
-    today = datetime.now().weekday()
-    day_name = days_map[today]
+        return jsonify({"ok": True}), 200
 
     if text == "/start":
-        send_message(chat_id, "Бот работает ✅\nИспользуй: сегодня, завтра, неделя, следующая пара")
+        send_message(
+            chat_id,
+            "Привет! Я бот с расписанием МИРЭА.\n\n"
+            "Команды:\n"
+            "сегодня\n"
+            "завтра\n"
+            "неделя\n"
+            "следующая пара",
+        )
 
-    elif "сегодня" in text:
-        send_message(chat_id, schedule[week_type][day_name])
+    elif text in ["сегодня", "/today"]:
+        today = datetime.now()
+        send_message(chat_id, format_day(DAYS_MAP[today.weekday()], today))
 
-    elif "завтра" in text:
-        tomorrow = (today + 1) % 7
-        send_message(chat_id, schedule[week_type][days_map[tomorrow]])
+    elif text in ["завтра", "/tomorrow"]:
+        tomorrow = datetime.now() + timedelta(days=1)
+        send_message(chat_id, format_day(DAYS_MAP[tomorrow.weekday()], tomorrow))
 
-    elif "неделя" in text:
-        result = ""
-        for day in days_map.values():
-            result += schedule[week_type][day] + "\n\n"
-        send_message(chat_id, result)
+    elif text in ["неделя", "/week"]:
+        week_type = get_week_type()
+        title = "Чётная неделя" if week_type == "even" else "Нечётная неделя"
+        result = [f"📅 {title}"]
+        for day_key in DAYS_MAP.values():
+            result.append(format_day(day_key))
+        send_message(chat_id, "\n\n".join(result))
 
-    elif "следующая" in text:
+    elif text in ["следующая пара", "/next"]:
         send_message(chat_id, get_next_lesson())
 
     else:
         send_message(chat_id, "Используй: сегодня, завтра, неделя, следующая пара")
 
-    return "ok"
+    return jsonify({"ok": True}), 200
 
-# ===== ЗАПУСК =====
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
