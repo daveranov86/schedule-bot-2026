@@ -1,6 +1,7 @@
 from flask import Flask, request
 import requests
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 
@@ -48,14 +49,12 @@ DAY_RU = {
     "sunday": "Воскресенье"
 }
 
-
 # ===== ОТПРАВКА =====
 def send_message(chat_id, text):
     requests.post(URL, json={
         "chat_id": chat_id,
         "text": text
     })
-
 
 # ===== ФОРМАТ ДНЯ =====
 def format_day(day):
@@ -69,7 +68,6 @@ def format_day(day):
         text += f"{l['time']} — {l['subject']}\n"
 
     return text.strip()
-
 
 # ===== СЛЕДУЮЩАЯ ПАРА =====
 def get_next_lesson():
@@ -91,16 +89,13 @@ def get_next_lesson():
         start = sh * 60 + sm
         end = eh * 60 + em
 
-        # если сейчас идёт пара
         if start <= current < end:
             return f"Сейчас идёт:\n{lesson['time']} — {lesson['subject']}\nКабинет: {lesson['room']}"
 
-        # если пара впереди
         if current < start:
             return f"Следующая пара:\n{lesson['time']} — {lesson['subject']}\nКабинет: {lesson['room']}"
 
     return "На сегодня пар больше нет"
-
 
 # ===== WEBHOOK =====
 @app.route("/webhook", methods=["POST"])
@@ -113,7 +108,7 @@ def webhook():
     if not chat_id:
         return "ok"
 
-    # 🔒 ПРИВАТНОСТЬ
+    # 🔒 ПРИВАТНЫЙ ДОСТУП
     if chat_id != ALLOWED_ID:
         return "ok"
 
@@ -140,7 +135,6 @@ def webhook():
 
     return "ok"
 
-
-# ===== ЗАПУСК =====
+# ===== ЗАПУСК (ВАЖНО ДЛЯ RENDER) =====
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
