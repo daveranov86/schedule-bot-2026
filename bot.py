@@ -5,7 +5,7 @@ import os
 
 app = Flask(__name__)
 
-TOKEN = "ТВОЙ_ТОКЕН"
+TOKEN = "8760259729:AAGD0y2l7IM0UxjyptOPB6NLZPeVga-lEVc"
 URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
 ALLOWED_ID = 1020934186  # твой ID
