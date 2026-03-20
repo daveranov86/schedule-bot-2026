@@ -1,6 +1,6 @@
 from flask import Flask, request
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__)
@@ -10,7 +10,6 @@ URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
 ALLOWED_ID = 1020934186  # твой ID
 
-# ===== РАСПИСАНИЕ =====
 SCHEDULE = {
     "default": {
         "monday": [],
@@ -49,14 +48,18 @@ DAY_RU = {
     "sunday": "Воскресенье"
 }
 
-# ===== ОТПРАВКА =====
+
+def msk_now():
+    return datetime.utcnow() + timedelta(hours=3)
+
+
 def send_message(chat_id, text):
     requests.post(URL, json={
         "chat_id": chat_id,
         "text": text
     })
 
-# ===== ФОРМАТ ДНЯ =====
+
 def format_day(day):
     lessons = SCHEDULE["default"][day]
 
@@ -64,14 +67,14 @@ def format_day(day):
         return f"📚 {DAY_RU[day]}:\nВыходной"
 
     text = f"📚 {DAY_RU[day]}:\n"
-    for l in lessons:
-        text += f"{l['time']} — {l['subject']}\n"
+    for lesson in lessons:
+        text += f"{lesson['time']} — {lesson['subject']}\n"
 
     return text.strip()
 
-# ===== СЛЕДУЮЩАЯ ПАРА =====
+
 def get_next_lesson():
-    now = datetime.now()
+    now = msk_now()
     day = now.strftime("%A").lower()
     lessons = SCHEDULE["default"][day]
 
@@ -97,44 +100,51 @@ def get_next_lesson():
 
     return "На сегодня пар больше нет"
 
-# ===== WEBHOOK =====
+
+@app.route("/", methods=["GET"])
+def home():
+    return "Бот работает", 200
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     msg = data.get("message", {})
     chat_id = msg.get("chat", {}).get("id")
-    text = (msg.get("text") or "").lower()
+    text = (msg.get("text") or "").strip().lower()
 
     if not chat_id:
         return "ok"
 
-    # 🔒 ПРИВАТНЫЙ ДОСТУП
     if chat_id != ALLOWED_ID:
         return "ok"
 
     if text == "/start":
-        send_message(chat_id, "Бот работает\n\nКоманды:\nсегодня\nзавтра\nнеделя\nследующая пара")
+        send_message(chat_id, "Бот работает\n\nКоманды:\nСегодня\nЗавтра\nНеделя\nСледующая пара")
 
-    elif "сегодня" in text:
-        day = datetime.now().strftime("%A").lower()
+    elif text == "сегодня":
+        day = msk_now().strftime("%A").lower()
         send_message(chat_id, format_day(day))
 
-    elif "завтра" in text:
-        day_index = (datetime.now().weekday() + 1) % 7
+    elif text == "завтра":
+        day_index = (msk_now().weekday() + 1) % 7
         day = list(DAY_RU.keys())[day_index]
         send_message(chat_id, format_day(day))
 
-    elif "неделя" in text:
+    elif text == "неделя":
         text_week = ""
         for d in DAY_RU:
             text_week += format_day(d) + "\n\n"
         send_message(chat_id, text_week.strip())
 
-    elif "следующая пара" in text:
+    elif text == "следующая пара":
         send_message(chat_id, get_next_lesson())
+
+    else:
+        send_message(chat_id, "Используй: Сегодня, Завтра, Неделя, Следующая пара")
 
     return "ok"
 
-# ===== ЗАПУСК (ВАЖНО ДЛЯ RENDER) =====
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
