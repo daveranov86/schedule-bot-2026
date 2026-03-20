@@ -4,90 +4,46 @@ from flask import Flask, request
 from datetime import datetime
 
 TOKEN = os.environ.get("TOKEN")
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+if not TOKEN:
+    raise ValueError("TOKEN not found")
+
+API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 app = Flask(__name__)
-@app.route("/")
+
+
+@app.route("/", methods=["GET"])
 def home():
-    return "Бот работает"
+    return "Бот работает", 200
+
 
 def send_message(chat_id, text):
-    url = f"{BASE_URL}/sendMessage"
-    requests.post(url, json={
-        "chat_id": chat_id,
-        "text": text
-    })
+    requests.post(
+        f"{API_URL}/sendMessage",
+        json={"chat_id": chat_id, "text": text},
+        timeout=30,
+    )
 
-# ===== РАСПИСАНИЕ =====
 
 schedule = {
-    "even": {  # четная
-        "monday": """Понедельник:
-09:00–10:30 История России
-10:40–12:10 Основы гос.
-12:40–14:10 Админ право
-14:20–15:50 Экономика""",
-
-        "tuesday": """Вторник:
-09:00–10:30 Регламентация
-10:40–12:10 История
-12:40–14:10 Политология
-14:20–15:50 Конституционное право""",
-
-        "wednesday": """Среда:
-14:20–15:50 Физра
-16:20–17:50 Физра
-18:00–19:30 Матан""",
-
-        "thursday": """Четверг:
-12:40–14:10 Конституционное право
-14:20–15:50 Экономика
-16:20–17:50 Экономика
-18:00–19:30 Макроэкономика""",
-
-        "friday": """Пятница:
-09:00–10:30 Макро
-10:40–12:10 Регламентация
-12:40–14:10 Русский""",
-
-        "saturday": """Суббота:
-16:20–17:50 Матан
-18:00–19:30 Матан""",
-
-        "sunday": "Выходной"
+    "even": {
+        "monday": "📚 Понедельник\n09:00–10:30 — История России\n10:40–12:10 — Основы российской государственности\n12:40–14:10 — Административное право\n14:20–15:50 — Экономика государственного и муниципального сектора",
+        "tuesday": "📚 Вторник\n09:00–10:30 — Регламентация служебной деятельности\n10:40–12:10 — История России\n12:40–14:10 — Политология\n14:20–15:50 — Конституционное право",
+        "wednesday": "📚 Среда\n14:20–15:50 — Физическая культура\n16:20–17:50 — Физическая культура\n18:00–19:30 — Математический анализ",
+        "thursday": "📚 Четверг\n12:40–14:10 — Конституционное право\n14:20–15:50 — Экономика государственного и муниципального сектора\n16:20–17:50 — Экономика государственного и муниципального сектора\n18:00–19:30 — Макроэкономика",
+        "friday": "📚 Пятница\n09:00–10:30 — Макроэкономика\n10:40–12:10 — Регламентация служебной деятельности\n12:40–14:10 — Русский язык и культура речи",
+        "saturday": "📚 Суббота\n16:20–17:50 — Математический анализ\n18:00–19:30 — Математический анализ",
+        "sunday": "Выходной",
     },
-
-    "odd": {  # нечетная
-        "monday": """Понедельник:
-09:00–10:30 История
-10:40–12:10 Основы гос.
-12:40–14:10 Админ право
-14:20–15:50 Админ право (лекция)""",
-
-        "tuesday": """Вторник:
-09:00–10:30 Регламентация
-10:40–12:10 История
-12:40–14:10 Основы гос.
-14:20–15:50 Конституционное право""",
-
-        "wednesday": """Среда:
-16:20–17:50 Английский
-18:00–19:30 Английский""",
-
-        "thursday": """Четверг:
-18:00–19:30 Макроэкономика""",
-
-        "friday": """Пятница:
-09:00–10:30 Макро
-10:40–12:10 Регламентация
-12:40–14:10 Политология""",
-
-        "saturday": """Суббота:
-10:40–12:10 Русский
-12:40–14:10 Обучение служением""",
-
-        "sunday": "Выходной"
-    }
+    "odd": {
+        "monday": "📚 Понедельник\n09:00–10:30 — История России\n10:40–12:10 — Основы российской государственности\n12:40–14:10 — Административное право\n14:20–15:50 — Административное право",
+        "tuesday": "📚 Вторник\n09:00–10:30 — Регламентация служебной деятельности\n10:40–12:10 — История России\n12:40–14:10 — Основы российской государственности\n14:20–15:50 — Конституционное право",
+        "wednesday": "📚 Среда\n16:20–17:50 — Иностранный язык\n18:00–19:30 — Иностранный язык",
+        "thursday": "📚 Четверг\n18:00–19:30 — Макроэкономика",
+        "friday": "📚 Пятница\n09:00–10:30 — Макроэкономика\n10:40–12:10 — Регламентация служебной деятельности\n12:40–14:10 — Политология",
+        "saturday": "📚 Суббота\n10:40–12:10 — Русский язык и культура речи\n12:40–14:10 — Обучение служением",
+        "sunday": "Выходной",
+    },
 }
 
 days_map = {
@@ -97,46 +53,50 @@ days_map = {
     3: "thursday",
     4: "friday",
     5: "saturday",
-    6: "sunday"
+    6: "sunday",
 }
 
+
 def get_week_type():
+    # Четность по номеру недели
     week_number = datetime.now().isocalendar()[1]
     return "even" if week_number % 2 == 0 else "odd"
 
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
+    message = data.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").lower().strip()
 
-    if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"].get("text", "").lower()
+    if not chat_id:
+        return "ok", 200
 
-        week_type = get_week_type()
-        today = datetime.now().weekday()
-        day_name = days_map[today]
+    week_type = get_week_type()
+    today = datetime.now().weekday()
+    day_name = days_map[today]
 
-        if text in ["/start"]:
-            send_message(chat_id, "Бот работает ✅")
+    if text == "/start":
+        send_message(
+            chat_id,
+            "Бот работает ✅\n\nКоманды:\nсегодня\нзавтра\nнеделя\n/today\n/tomorrow\n/week",
+        )
+    elif text in ["сегодня", "/today"]:
+        send_message(chat_id, schedule[week_type][day_name])
+    elif text in ["завтра", "/tomorrow"]:
+        tomorrow = (today + 1) % 7
+        send_message(chat_id, schedule[week_type][days_map[tomorrow]])
+    elif text in ["неделя", "/week"]:
+        result = "\n\n".join(schedule[week_type][d] for d in days_map.values())
+        send_message(chat_id, result)
+    else:
+        send_message(chat_id, "Используй: сегодня, завтра, неделя")
 
-        elif "сегодня" in text or "/today" in text:
-            send_message(chat_id, schedule[week_type][day_name])
+    return "ok", 200
 
-        elif "завтра" in text or "/tomorrow" in text:
-            tomorrow = (today + 1) % 7
-            send_message(chat_id, schedule[week_type][days_map[tomorrow]])
 
-        elif "неделя" in text or "/week" in text:
-            result = ""
-            for day in days_map.values():
-                result += schedule[week_type][day] + "\n\n"
-            send_message(chat_id, result)
-
-        else:
-            send_message(chat_id, "Используй: сегодня / завтра / неделя")
-
-    return "ok"
-    if __name__ == "__main__":
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host="0.0.0.0", port=port)
-   
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
