@@ -7,6 +7,9 @@ TOKEN = os.environ.get("TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 app = Flask(__name__)
+@app.route("/")
+def home():
+    return "Бот работает"
 
 def send_message(chat_id, text):
     url = f"{BASE_URL}/sendMessage"
