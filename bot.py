@@ -9,7 +9,6 @@ if not TOKEN:
     raise ValueError("TOKEN не найден в переменных окружения")
 
 API_URL = f"https://api.telegram.org/bot{TOKEN}"
-
 app = Flask(__name__)
 
 DAYS_MAP = {
@@ -125,14 +124,14 @@ def send_message(chat_id: int, text: str) -> None:
     )
 
 
-def get_week_type(target_date: datetime | None = None) -> str:
+def get_week_type(target_date=None) -> str:
     if target_date is None:
         target_date = datetime.now()
     monday = target_date - timedelta(days=target_date.weekday())
     return "even" if monday.day % 2 == 0 else "odd"
 
 
-def format_day(day_key: str, target_date: datetime | None = None) -> str:
+def format_day(day_key: str, target_date=None) -> str:
     week_type = get_week_type(target_date)
     lessons = SCHEDULE[week_type][day_key]
 
@@ -158,8 +157,10 @@ def get_next_lesson() -> str:
 
     for lesson in lessons:
         start_str, end_str = lesson["time"].split("-")
+
         sh, sm = map(int, start_str.split(":"))
         eh, em = map(int, end_str.split(":"))
+
         start_minutes = sh * 60 + sm
         end_minutes = eh * 60 + em
 
